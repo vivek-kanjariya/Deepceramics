@@ -23,13 +23,13 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  const links = [
-    { href: "/", label: "Home" },
-    { href: "/products", label: "Products" },
-    // { href: "/gallery", label: "Gallery" },
-    { href: "/about", label: "About" },
-    { href: "/contact", label: "Contact" },
-  ];
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/products", label: "Products" },
+  { href: "/blog", label: "Blog" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
+];
 
   return (
     <motion.nav
