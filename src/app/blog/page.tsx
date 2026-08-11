@@ -29,7 +29,7 @@ export default async function BlogPage() {
       <p className="text-gray-500 mb-12 text-lg">
         Design inspiration, tile trends, and ideas for your space.
       </p>
-{/* mock commit  */}
+{/* mock  */}
       {posts.length === 0 ? (
         <p className="text-gray-400 text-center py-24">No posts yet. Check back soon!</p>
       ) : (
