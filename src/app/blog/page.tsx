@@ -1,10 +1,7 @@
 export const revalidate = 0
 import { getPosts } from '@/lib/sanity-client'
-export const revalidate = 0
 import Link from 'next/link'
-export const revalidate = 0
 import Image from 'next/image'
-export const revalidate = 0
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
