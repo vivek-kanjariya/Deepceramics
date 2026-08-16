@@ -173,7 +173,6 @@ function MapSkeleton() {
 }
 
 function MapWithFallback({ embedSrc, fallbackLink }) {
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   return (
@@ -190,11 +189,6 @@ function MapWithFallback({ embedSrc, fallbackLink }) {
         </span>
       </div>
       <div className="relative h-64 w-full overflow-hidden bg-gray-100">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-            <Loader2 className="animate-spin text-gray-400" size={32} />
-          </div>
-        )}
         {error ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 p-4 text-center">
             <MapPin className="text-gray-400 mb-2" size={32} />
@@ -210,16 +204,11 @@ function MapWithFallback({ embedSrc, fallbackLink }) {
           </div>
         ) : (
           <iframe
-            loading="lazy"
             title="Ahmedabad Showroom Location"
             referrerPolicy="no-referrer-when-downgrade"
             className="h-full w-full border-0"
             src={embedSrc}
-            onLoad={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setError(true);
-            }}
+            onError={() => setError(true)}
           />
         )}
       </div>
