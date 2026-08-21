@@ -1,7 +1,12 @@
+// src/app/api/contact/route.js
+
 import { Resend } from "resend";
 import sanitizeHtml from "sanitize-html";
 
-// SANITIZE
+// ----- Rate limiting (in-memory) -----
+const rateLimitMap = new Map();
+
+// ----- Sanitization -----
 const sanitizeInput = (value) => {
   if (!value) return "";
   return sanitizeHtml(value, {
@@ -10,7 +15,7 @@ const sanitizeInput = (value) => {
   }).trim();
 };
 
-// VALIDATION
+// ----- Validation -----
 const validateForm = ({ name, phone, message }) => {
   const errors = {};
 
@@ -29,7 +34,7 @@ const validateForm = ({ name, phone, message }) => {
   return errors;
 };
 
-// EMAIL TEMPLATE
+// ----- Email template -----
 const emailTemplate = ({ name, phone, message }) => `
   <div>
     <h2>New Inquiry</h2>
@@ -39,16 +44,38 @@ const emailTemplate = ({ name, phone, message }) => `
   </div>
 `;
 
-// POST HANDLER
+// ----- POST handler -----
 export async function POST(req) {
   try {
-    // MOVE INSIDE HANDLER (THIS IS THE FIX)
+    // ── Rate limiting ──────────────────────────────────────────
+    const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+    const now = Date.now();
+    const windowMs = 60_000; // 1 minute
+    const maxRequests = 3;
+
+    const record = rateLimitMap.get(ip) ?? { count: 0, start: now };
+    if (now - record.start > windowMs) {
+      record.count = 0;
+      record.start = now;
+    }
+    record.count++;
+    rateLimitMap.set(ip, record);
+
+    if (record.count > maxRequests) {
+      return Response.json(
+        { success: false, message: "Too many requests" },
+        { status: 429 }
+      );
+    }
+
+    // ── Resend client (moved inside handler) ──────────────────
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     if (!process.env.RESEND_API_KEY) {
       throw new Error("Missing RESEND_API_KEY");
     }
 
+    // ── Parse & sanitize ──────────────────────────────────────
     const body = await req.json();
 
     const cleanData = {
@@ -63,6 +90,7 @@ export async function POST(req) {
       return Response.json({ success: false, errors }, { status: 400 });
     }
 
+    // ── Send email ────────────────────────────────────────────
     const response = await resend.emails.send({
       from: "Deep Trading <onboarding@resend.dev>",
       to: process.env.CONTACT_EMAIL,
@@ -77,7 +105,6 @@ export async function POST(req) {
     });
   } catch (error) {
     console.error(error);
-
     return Response.json(
       { success: false, message: error.message },
       { status: 500 }

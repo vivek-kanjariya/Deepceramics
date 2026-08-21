@@ -92,3 +92,33 @@ body {
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
+
+@import "tailwindcss";
+
+:root {
+  --background: #FFFCFA;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-serif: var(--font-serif), Georgia, serif;
+}
+
+::selection {
+  background-color: #E86F2C;
+  color: #ffffff;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}

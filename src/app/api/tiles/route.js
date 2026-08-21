@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { createClient } from "@supabase/supabase-js";
 import { validateTile, validateImage } from "../../../lib/validation";
+import { cookies } from "next/headers"; // added for auth
 
 // ----- Environment & client setup -----
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -50,6 +51,23 @@ async function generateUniqueSlug(baseSlug) {
 
 // ----- Main POST handler -----
 export async function POST(request) {
+  // ── AUTH CHECK ──────────────────────────────────────────────
+  const cookieStore = cookies();
+  const supabaseAuth = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      global: {
+        headers: { Cookie: cookieStore.toString() }
+      }
+    }
+  );
+  const { data: { session } } = await supabaseAuth.auth.getSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // ── REST OF YOUR EXISTING CODE BELOW ───────────────────────
+
   const requestId = crypto.randomUUID().slice(0, 8);
   console.log(`[${requestId}] 🚀 Upload started`);
 

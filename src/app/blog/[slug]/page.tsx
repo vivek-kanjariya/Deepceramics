@@ -1,136 +1,234 @@
 import { getPost, getPosts } from '@/lib/sanity-client'
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Metadata } from 'next'
 import { PortableText, PortableTextComponents } from '@portabletext/react'
+
+export const revalidate = 60
+
+type PageProps = {
+  params: Promise<{ slug: string }>
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Static Params
+───────────────────────────────────────────────────────────── */
 
 export async function generateStaticParams() {
   try {
     const posts = await getPosts()
-    return posts.map((post: any) => ({ slug: post.slug.current }))
-  } catch {
+
+    if (!Array.isArray(posts)) return []
+
+    return posts
+      .filter((post: any) => post?.slug?.current)
+      .map((post: any) => ({
+        slug: post.slug.current,
+      }))
+  } catch (error) {
+    console.error('Failed to generate static params:', error)
     return []
   }
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { slug: string }
-}): Promise<Metadata> {
+/* ─────────────────────────────────────────────────────────────
+   Metadata
+───────────────────────────────────────────────────────────── */
+
+export async function generateMetadata(
+  props: PageProps
+): Promise<Metadata> {
+  const params = await props.params
   const post = await getPost(params.slug)
+
   if (!post) return {}
+
+  const image = post.mainImage ? urlFor(post.mainImage) : undefined
+
   return {
-    title: `${post.title} | Deep Ceramics Blog`,
+    title: `${post.title} | Deep Ceramics`,
     description: post.excerpt || '',
     openGraph: {
       title: post.title,
       description: post.excerpt || '',
-      images: post.mainImage ? [{ url: urlFor(post.mainImage) || '' }] : [],
+      type: 'article',
+      images: image ? [{ url: image }] : [],
     },
   }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Sanity Image URL Builder
+───────────────────────────────────────────────────────────── */
+
 function urlFor(source: any): string | null {
   if (!source?.asset?._ref) return null
+
+  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
+  const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET
+
+  if (!projectId || !dataset) return null
+
   const ref = source.asset._ref
   const parts = ref.split('-')
-  // ref format: image-{id}-{dimensions}-{format}
+
+  if (parts.length < 4) return null
+
   const format = parts[parts.length - 1]
   const dimensions = parts[parts.length - 2]
   const id = parts.slice(1, parts.length - 2).join('-')
-  return `https://cdn.sanity.io/images/${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}/${process.env.NEXT_PUBLIC_SANITY_DATASET}/${id}-${dimensions}.${format}`
+
+  return `https://cdn.sanity.io/images/${projectId}/${dataset}/${id}-${dimensions}.${format}`
 }
 
-// ── Custom PortableText components ───────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
+   Reading Time Calculation
+───────────────────────────────────────────────────────────── */
+
+function getReadingTime(body: any[]): number {
+  if (!Array.isArray(body) || !body.length) return 1
+
+  let text = ''
+
+  for (const block of body) {
+    if (block._type === 'block' && Array.isArray(block.children)) {
+      text +=
+        ' ' +
+        block.children
+          .map((child: any) => child.text || '')
+          .join(' ')
+    }
+  }
+
+  const words = text.trim().split(/\s+/).filter(Boolean).length
+
+  return Math.max(1, Math.ceil(words / 200))
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Portable Text Custom Components
+───────────────────────────────────────────────────────────── */
 
 const portableTextComponents: PortableTextComponents = {
-  // Block-level overrides
   block: {
     h1: ({ children }) => (
-      <h1 className="text-3xl font-bold mt-12 mb-4 text-[#1F1F1F] leading-tight">{children}</h1>
+      <h1 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] text-[#171717] leading-[1.15] mt-16 mb-6">
+        {children}
+      </h1>
     ),
+
     h2: ({ children }) => (
-      <h2 className="text-2xl font-bold mt-10 mb-3 text-[#1F1F1F] leading-snug border-b border-gray-100 pb-2">
-        {children}
-      </h2>
+      <div className="mt-16 mb-7">
+        <div className="w-8 h-[3px] bg-[#E86F2C] mb-4" />
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.02em] text-[#171717] leading-tight">
+          {children}
+        </h2>
+      </div>
     ),
+
     h3: ({ children }) => (
-      <h3 className="text-xl font-semibold mt-8 mb-2 text-[#1F1F1F]">{children}</h3>
-    ),
-    h4: ({ children }) => (
-      <h4 className="text-lg font-semibold mt-6 mb-2 text-[#374151]">{children}</h4>
-    ),
-    normal: ({ children }) => (
-      <p className="text-[17px] leading-[1.85] text-gray-700 mb-5">{children}</p>
-    ),
-    blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-orange-400 pl-5 py-1 my-6 bg-orange-50 rounded-r-xl italic text-gray-600 text-[16px]">
+      <h3 className="text-xl sm:text-2xl font-bold text-[#222] leading-tight mt-12 mb-4">
         {children}
+      </h3>
+    ),
+
+    h4: ({ children }) => (
+      <h4 className="text-lg font-bold text-[#333] mt-9 mb-3">
+        {children}
+      </h4>
+    ),
+
+    normal: ({ children }) => (
+      <p className="text-[17px] sm:text-[18px] leading-[1.85] text-[#454545] mb-6 tracking-[-0.005em]">
+        {children}
+      </p>
+    ),
+
+    blockquote: ({ children }) => (
+      <blockquote className="relative my-12 py-7 pl-7 pr-5 border-l-[3px] border-[#E86F2C] bg-[#FFF7F2]">
+        <div className="absolute -top-4 left-5 text-5xl font-serif text-[#E86F2C] leading-none opacity-70">
+          “
+        </div>
+        <div className="text-xl sm:text-2xl font-medium italic leading-relaxed text-[#333]">
+          {children}
+        </div>
       </blockquote>
     ),
   },
 
-  // List styles
   list: {
     bullet: ({ children }) => (
-      <ul className="list-disc list-outside pl-6 mb-5 space-y-2 text-gray-700 text-[17px]">
+      <ul className="list-disc pl-6 mb-7 space-y-3 text-[17px] sm:text-[18px] leading-[1.75] text-[#454545]">
         {children}
       </ul>
     ),
+
     number: ({ children }) => (
-      <ol className="list-decimal list-outside pl-6 mb-5 space-y-2 text-gray-700 text-[17px]">
+      <ol className="list-decimal pl-6 mb-7 space-y-3 text-[17px] sm:text-[18px] leading-[1.75] text-[#454545]">
         {children}
       </ol>
     ),
   },
+
   listItem: {
-    bullet: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
-    number: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
+    bullet: ({ children }) => <li className="pl-2">{children}</li>,
+    number: ({ children }) => <li className="pl-2">{children}</li>,
   },
 
-  // Inline marks
   marks: {
     strong: ({ children }) => (
-      <strong className="font-semibold text-[#1F1F1F]">{children}</strong>
+      <strong className="font-semibold text-[#171717]">{children}</strong>
     ),
-    em: ({ children }) => <em className="italic text-gray-600">{children}</em>,
+
+    em: ({ children }) => <em className="italic text-[#555]">{children}</em>,
+
     code: ({ children }) => (
-      <code className="bg-gray-100 text-orange-600 text-[13px] font-mono px-1.5 py-0.5 rounded">
+      <code className="bg-[#F3F3F3] text-[#C95716] text-[14px] font-mono px-1.5 py-0.5 rounded">
         {children}
       </code>
     ),
-    link: ({ value, children }) => (
-      <a
-        href={value?.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-orange-600 underline underline-offset-2 hover:text-orange-700 transition-colors"
-      >
-        {children}
-      </a>
-    ),
+
+    link: ({ value, children }) => {
+      const href = value?.href || '#'
+      const isExternal = href.startsWith('http')
+
+      return (
+        <a
+          href={href}
+          target={isExternal ? '_blank' : undefined}
+          rel={isExternal ? 'noopener noreferrer' : undefined}
+          className="text-[#D85F20] underline underline-offset-4 decoration-[#F3B08B] hover:decoration-[#D85F20] transition-colors"
+        >
+          {children}
+        </a>
+      )
+    },
   },
 
-  // Custom types
   types: {
-    // Sanity image blocks inside body
     image: ({ value }) => {
       const src = urlFor(value)
+
       if (!src) return null
+
       return (
-        <figure className="my-10">
-          <div className="relative w-full rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        <figure className="my-14">
+          <div
+            className="relative w-full overflow-hidden bg-[#F4F1EF]"
+            style={{ aspectRatio: '16/9' }}
+          >
             <Image
               src={src}
               alt={value.alt || ''}
               fill
-              className="object-cover"
-              sizes="(max-width: 768px) 100vw, 800px"
+              className="object-cover transition-transform duration-700 hover:scale-[1.015]"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 800px, 900px"
             />
           </div>
+
           {value.caption && (
-            <figcaption className="text-center text-sm text-gray-400 mt-3 italic">
+            <figcaption className="mt-3 text-[13px] sm:text-sm leading-relaxed text-[#777]">
               {value.caption}
             </figcaption>
           )}
@@ -138,45 +236,47 @@ const portableTextComponents: PortableTextComponents = {
       )
     },
 
-    // Code blocks (if you have a `code` type from sanity-plugin-code-input)
     code: ({ value }) => (
-      <div className="my-8">
-        {value.filename && (
-          <div className="bg-gray-800 text-gray-400 text-xs font-mono px-4 py-2 rounded-t-xl border-b border-gray-700">
+      <div className="my-10">
+        {value?.filename && (
+          <div className="bg-[#262626] text-[#AFAFAF] text-xs font-mono px-4 py-2.5 border-b border-[#3A3A3A]">
             {value.filename}
           </div>
         )}
-        <pre
-          className={`bg-gray-900 text-green-300 text-[13px] font-mono leading-relaxed p-6 overflow-x-auto ${
-            value.filename ? 'rounded-b-xl' : 'rounded-xl'
-          }`}
-        >
-          <code>{value.code}</code>
+
+        <pre className="bg-[#181818] text-[#E8E8E8] text-[13px] sm:text-[14px] font-mono leading-relaxed p-5 sm:p-6 overflow-x-auto">
+          <code>{value?.code || ''}</code>
         </pre>
       </div>
     ),
 
-    // Table support (if using sanity-plugin-table)
     table: ({ value }) => (
-      <div className="my-8 overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <div className="my-12 overflow-x-auto border border-[#E5E2DF]">
         <table className="w-full text-sm text-left border-collapse">
           <tbody>
-            {value.rows?.map((row: any, rowIdx: number) => (
+            {value?.rows?.map((row: any, rowIdx: number) => (
               <tr
                 key={rowIdx}
-                className={rowIdx === 0 ? 'bg-gray-50 font-semibold text-[#1F1F1F]' : 'border-t border-gray-100 even:bg-gray-50/50'}
+                className={
+                  rowIdx === 0
+                    ? 'bg-[#F7F5F3]'
+                    : 'border-t border-[#EAE7E4]'
+                }
               >
-                {row.cells?.map((cell: string, cellIdx: number) => (
+                {row.cells?.map((cell: string, cellIdx: number) =>
                   rowIdx === 0 ? (
-                    <th key={cellIdx} className="px-4 py-3 border-b border-gray-200 whitespace-nowrap">
+                    <th
+                      key={cellIdx}
+                      className="px-5 py-4 font-semibold text-[#222] whitespace-nowrap"
+                    >
                       {cell}
                     </th>
                   ) : (
-                    <td key={cellIdx} className="px-4 py-3 text-gray-600">
+                    <td key={cellIdx} className="px-5 py-4 text-[#555] align-top">
                       {cell}
                     </td>
                   )
-                ))}
+                )}
               </tr>
             ))}
           </tbody>
@@ -184,28 +284,53 @@ const portableTextComponents: PortableTextComponents = {
       </div>
     ),
 
-    // Callout / tip boxes (if you have a custom `callout` schema)
     callout: ({ value }) => {
-      const styles: Record<string, string> = {
-        tip:     'bg-green-50 border-green-400 text-green-800',
-        warning: 'bg-yellow-50 border-yellow-400 text-yellow-800',
-        info:    'bg-blue-50 border-blue-400 text-blue-800',
-        danger:  'bg-red-50 border-red-400 text-red-800',
+      const styles: Record<
+        string,
+        { wrapper: string; label: string }
+      > = {
+        tip: {
+          wrapper: 'bg-[#F1F8F2] border-[#6D9B73]',
+          label: 'TIP',
+        },
+        warning: {
+          wrapper: 'bg-[#FFF8E8] border-[#D9A441]',
+          label: 'GOOD TO KNOW',
+        },
+        info: {
+          wrapper: 'bg-[#F2F6FA] border-[#6E91B3]',
+          label: 'NOTE',
+        },
+        danger: {
+          wrapper: 'bg-[#FFF1EF] border-[#C76A60]',
+          label: 'IMPORTANT',
+        },
       }
-      const style = styles[value.tone] || styles.info
+
+      const style = styles[value?.tone] || styles.info
+
       return (
-        <div className={`border-l-4 rounded-r-xl px-5 py-4 my-6 text-[15px] leading-relaxed ${style}`}>
-          {value.text}
+        <div className={`my-10 border-l-[3px] px-6 py-6 ${style.wrapper}`}>
+          <div className="text-[11px] font-bold tracking-[0.14em] text-[#555] mb-2">
+            {style.label}
+          </div>
+          <div className="text-[16px] sm:text-[17px] leading-relaxed text-[#444]">
+            {value?.text}
+          </div>
         </div>
       )
     },
   },
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
+   Main Page Component
+───────────────────────────────────────────────────────────── */
 
-export default async function BlogPostPage({ params }: { params: { slug: string } }) {
+export default async function BlogPostPage(props: PageProps) {
+  const params = await props.params
   let post = null
+
   try {
     post = await getPost(params.slug)
   } catch (e) {
@@ -215,18 +340,37 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
   if (!post) return notFound()
 
   const imageUrl = urlFor(post.mainImage)
+  const readingTime = getReadingTime(post.body)
+
+  const formattedDate = post.publishedAt
+    ? new Date(post.publishedAt).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null
 
   return (
-    <main className="bg-white min-h-screen">
+    <main className="min-h-screen bg-[#FFFCFA] text-[#171717]">
+      {/* Editorial Nav */}
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-8 pt-7">
+        <Link
+          href="/blog"
+          className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.12em] uppercase text-[#777] hover:text-[#E16A27] transition-colors"
+        >
+          <span className="text-base">←</span>
+          Deep Ceramics Journal
+        </Link>
+      </div>
+
       {/* Hero */}
-      <div className="max-w-3xl mx-auto px-4 pt-14 pb-0">
-        {/* Category badges */}
+      <header className="max-w-[1050px] mx-auto px-5 sm:px-8 pt-14 sm:pt-20 pb-12">
         {post.categories?.length > 0 && (
-          <div className="flex gap-2 mb-5 flex-wrap">
+          <div className="flex flex-wrap gap-x-4 gap-y-2 mb-7">
             {post.categories.map((cat: string) => (
               <span
                 key={cat}
-                className="text-xs font-semibold tracking-wide uppercase px-3 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100"
+                className="text-[11px] font-bold tracking-[0.13em] uppercase text-[#D86220]"
               >
                 {cat}
               </span>
@@ -234,76 +378,121 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
           </div>
         )}
 
-        {/* Title */}
-        <h1 className="text-4xl sm:text-5xl font-bold text-[#1F1F1F] leading-tight mb-5">
+        <h1 className="max-w-[1000px] text-[42px] sm:text-[58px] lg:text-[70px] font-bold tracking-[-0.045em] leading-[0.98] text-[#171717]">
           {post.title}
         </h1>
 
-        {/* Excerpt */}
         {post.excerpt && (
-          <p className="text-lg text-gray-500 leading-relaxed mb-6">{post.excerpt}</p>
+          <p className="max-w-[780px] mt-7 text-[19px] sm:text-[22px] leading-[1.5] text-[#686868] tracking-[-0.01em]">
+            {post.excerpt}
+          </p>
         )}
 
-        {/* Meta */}
-        <div className="flex items-center gap-3 text-sm text-gray-400 mb-10 border-b border-gray-100 pb-8">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-9 pt-6 border-t border-[#E8E3DF] text-[13px] text-[#777]">
           {post.author && (
-            <span className="font-medium text-gray-600">By {post.author}</span>
+            <span className="font-semibold text-[#333]">By {post.author}</span>
           )}
-          {post.author && post.publishedAt && <span>·</span>}
-          {post.publishedAt && (
-            <span>
-              {new Date(post.publishedAt).toLocaleDateString('en-IN', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </span>
-          )}
-        </div>
-      </div>
 
-      {/* Cover image — full bleed feel */}
+          {formattedDate && (
+            <>
+              <span className="text-[#C4C0BC]">/</span>
+              <span>{formattedDate}</span>
+            </>
+          )}
+
+          <span className="text-[#C4C0BC]">/</span>
+          <span>{readingTime} min read</span>
+        </div>
+      </header>
+
+      {/* Hero Image */}
       {imageUrl && (
-        <div className="max-w-4xl mx-auto px-4 mb-12">
-          <div className="relative w-full rounded-3xl overflow-hidden shadow-lg" style={{ aspectRatio: '21/9' }}>
+        <div className="max-w-[1280px] mx-auto px-0 sm:px-8 mb-16">
+          <div
+            className="relative w-full overflow-hidden bg-[#EDE9E6]"
+            style={{ aspectRatio: '2/1' }}
+          >
             <Image
               src={imageUrl}
               alt={post.mainImage?.alt || post.title}
               fill
-              className="object-cover"
               priority
-              sizes="(max-width: 1024px) 100vw, 900px"
+              className="object-cover"
+              sizes="100vw"
             />
           </div>
         </div>
       )}
 
-      {/* Body */}
-      {post.body && (
-        <article className="max-w-3xl mx-auto px-4 pb-24">
-          <PortableText value={post.body} components={portableTextComponents} />
-        </article>
-      )}
+      {/* Article Content */}
+      <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(0,760px)_1fr] gap-8 lg:gap-12">
+          <aside className="hidden lg:block">
+            <div className="sticky top-10 pt-2">
+              <div className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#A09A95] mb-4">
+                Deep Ceramics
+              </div>
+              <div className="h-px bg-[#E5E0DC] w-8 mb-4" />
+              <div className="text-xs leading-relaxed text-[#999]">
+                Practical ideas,
+                <br />
+                inspiration &<br />
+                tile guides.
+              </div>
+            </div>
+          </aside>
 
-      {/* Footer CTA */}
-      <div className="max-w-3xl mx-auto px-4 pb-20">
-        <div className="bg-orange-50 border border-orange-100 rounded-3xl px-8 py-10 text-center">
-          <p className="text-lg font-semibold text-[#1F1F1F] mb-2">
-            Have questions about tile selection?
-          </p>
-          <p className="text-gray-500 mb-6 text-sm">
-            Visit our showroom in Ahmedabad or chat with us — we'll help you choose right the first time.
-          </p>
-          <a
-            href="https://wa.me/919974165307?text=Hi%2C%20I'm%20interested%20in%20your%20tiles%20and%20sanitary%20solutions."
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-3 rounded-full transition-colors text-sm"
-          >
-            💬 Chat on WhatsApp
-          </a>
+          <article className="min-w-0">
+            {post.body && (
+              <PortableText
+                value={post.body}
+                components={portableTextComponents}
+              />
+            )}
+          </article>
+
+          <div className="hidden lg:block" />
         </div>
       </div>
+
+      {/* CTA Section */}
+      <section className="border-t border-[#E5E0DC] bg-[#F5F0EC]">
+        <div className="max-w-[1050px] mx-auto px-5 sm:px-8 py-20 sm:py-24">
+          <div className="max-w-[700px]">
+            <div className="text-[11px] font-bold tracking-[0.16em] uppercase text-[#D86220] mb-5">
+              Need help choosing?
+            </div>
+
+            <h2 className="text-3xl sm:text-5xl font-bold tracking-[-0.035em] leading-tight text-[#171717]">
+              Your space deserves the right tile.
+            </h2>
+
+            <p className="mt-5 text-[17px] sm:text-lg leading-relaxed text-[#666] max-w-[620px]">
+              Not sure what works for your space? Visit Deep Ceramics and talk
+              to our team. We can help you narrow down the options without
+              making the process complicated.
+            </p>
+
+            <div className="flex flex-wrap gap-3 mt-8">
+              <a
+                href="https://wa.me/919974165307?text=Hi%2C%20I'm%20interested%20in%20your%20tiles%20and%20sanitary%20solutions."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center bg-[#E86F2C] hover:bg-[#D96020] text-white font-semibold text-sm px-6 py-3.5 transition-colors"
+              >
+                Talk to us on WhatsApp
+              </a>
+
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center border border-[#D8D0CA] hover:border-[#B9AEA6] bg-white text-[#333] font-semibold text-sm px-6 py-3.5 transition-colors"
+              >
+                Explore Deep Ceramics
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   )
 }

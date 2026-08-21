@@ -16,7 +16,7 @@
     "@sanity/icons": "^5.2.1",
     "@sanity/image-url": "^1.2.0",
     "@sanity/vision": "^3.99.0",
-    "@supabase/ssr": "^0.12.0",
+    "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.108.2",
     "@tailwindcss/forms": "^0.5.11",
     "dotenv": "^17.2.3",

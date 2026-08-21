@@ -12,24 +12,20 @@ export function validateFile(file) {
   return { success: true };
 }
 
-// ----- Validate image for API route (more permissive) -----
+// ----- Validate image for API route (stricter) -----
 export function validateImage(file) {
-  if (!file) {
-    return { success: false, error: 'No image file provided' };
-  }
-  const allowedTypes = [
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-    'application/octet-stream' // fallback for ambiguous files
-  ];
-  if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/')) {
+  if (!file) return { success: false, error: 'No image file provided' };
+
+  // Only allow JPEG, PNG, WebP – remove SVG and octet-stream
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
     return {
       success: false,
-      error: `Unsupported file type: "${file.type}". Allowed: ${allowedTypes.join(', ')}`
+      error: `Unsupported file type: "${file.type}". Allowed: JPEG, PNG, WebP`
     };
   }
-  const maxSize = 5 * 1024 * 1024;
-  if (file.size > maxSize) {
-    return { success: false, error: `Image must be less than ${maxSize / 1024 / 1024}MB` };
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, error: 'Image must be less than 5MB' };
   }
   return { success: true };
 }
